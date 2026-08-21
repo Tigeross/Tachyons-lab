@@ -1,0 +1,4 @@
+pyodbc
+tqdm
+requests
+beautifulsoup4
