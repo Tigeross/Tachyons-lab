@@ -110892,5 +110892,762 @@
       ],
       "special_events": []
     }
+  },
+  {
+    "id": 10084,
+    "chara_id_card": 1084,
+    "rarity": 1,
+    "effect_table_id": 10084,
+    "unique_effect_id": null,
+    "command_id": 102,
+    "skill_set_id": 9081084,
+    "support_card_type": 1,
+    "card_chara_name": "Tanino Gimlet",
+    "prefered_type_id": 2,
+    "prefered_type": "Power",
+    "effects": [
+      {
+        "0lb": 15,
+        "1lb": 16,
+        "2lb": 17,
+        "3lb": 18,
+        "mlb": 20,
+        "type": 1,
+        "type_name": "Friendship Bonus"
+      },
+      {
+        "0lb": -1,
+        "1lb": -1,
+        "2lb": -1,
+        "3lb": -1,
+        "mlb": 1,
+        "type": 4,
+        "type_name": "Stamina Bonus"
+      },
+      {
+        "0lb": 15,
+        "1lb": 16,
+        "2lb": 18,
+        "3lb": 20,
+        "mlb": 20,
+        "type": 14,
+        "type_name": "Initial Friendship Gauge"
+      },
+      {
+        "0lb": 1,
+        "1lb": 2,
+        "2lb": 3,
+        "3lb": 5,
+        "mlb": 5,
+        "type": 15,
+        "type_name": "Race Bonus"
+      },
+      {
+        "0lb": 5,
+        "1lb": 6,
+        "2lb": 8,
+        "3lb": 10,
+        "mlb": 10,
+        "type": 16,
+        "type_name": "Fan Bonus"
+      },
+      {
+        "0lb": 1,
+        "1lb": 1,
+        "2lb": 1,
+        "3lb": 2,
+        "mlb": 2,
+        "type": 17,
+        "type_name": "Hint Levels"
+      },
+      {
+        "0lb": 20,
+        "1lb": 23,
+        "2lb": 26,
+        "3lb": 30,
+        "mlb": 30,
+        "type": 18,
+        "type_name": "Hint Frequency"
+      }
+    ],
+    "hints_table": [
+      {
+        "type": "skill_hint",
+        "skill_id": 200152,
+        "skill_data": {
+          "id": 200152,
+          "rarity": 1,
+          "group_id": 20015,
+          "icon_id": 10031,
+          "grade_value": 129,
+          "condition_1": "ground_condition==1",
+          "skill_time_active": -1,
+          "skill_cooldown_time": 0,
+          "ability_type": 3,
+          "ability_value": 400000,
+          "skill_name": "Firm Conditions ○",
+          "skill_desc": "Moderately increase performance on firm ground."
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 200642,
+        "skill_data": {
+          "id": 200642,
+          "rarity": 1,
+          "group_id": 20064,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "running_style==4&is_lastspurt==1&corner==0",
+          "skill_time_active": 9000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Straightaway Spurt",
+          "skill_desc": "Slightly increase acceleration on a straight in the last spurt. (End Closer)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 200702,
+        "skill_data": {
+          "id": 200702,
+          "rarity": 1,
+          "group_id": 20070,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "distance_type==2&phase_random==2&order_rate>50",
+          "skill_time_active": 30000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Updrafters",
+          "skill_desc": "Slightly increase passing ability when positioned toward the back late-race. (Mile)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 201122,
+        "skill_data": {
+          "id": 201122,
+          "rarity": 1,
+          "group_id": 20112,
+          "icon_id": 20091,
+          "grade_value": 129,
+          "condition_1": "distance_type==3&phase_random==0",
+          "skill_time_active": 30000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 8,
+          "ability_value": 100000,
+          "skill_name": "Hawkeye",
+          "skill_desc": "Moderately widen field of view with heightened observation early-race. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 202082,
+        "skill_data": {
+          "id": 202082,
+          "rarity": 1,
+          "group_id": 20208,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "distance_type==3&phase_firsthalf_random==2&order_rate>=40",
+          "skill_time_active": 18000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Take the Chance",
+          "skill_desc": "Slightly increase acceleration when positioned midpack or further back in the early part of late-race. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 202102,
+        "skill_data": {
+          "id": 202102,
+          "rarity": 1,
+          "group_id": 20210,
+          "icon_id": 20011,
+          "grade_value": 217,
+          "condition_1": "distance_type==3&phase_random==1&order_rate>=50",
+          "skill_time_active": 24000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 27,
+          "ability_value": 1500,
+          "skill_name": "Eager",
+          "skill_desc": "When positioned toward the back mid-race, slightly increase velocity. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "stat_hint",
+        "stats": [
+          {
+            "stat_id": "Guts",
+            "value": 6
+          },
+          {
+            "stat_id": "Power",
+            "value": 2
+          }
+        ]
+      }
+    ],
+    "hints_event_table": [
+      {
+        "type": "skill_hint",
+        "skill_id": 201552,
+        "skill_data": {
+          "id": 201552,
+          "rarity": 1,
+          "group_id": 20155,
+          "icon_id": 10051,
+          "grade_value": 174,
+          "condition_1": "running_style==4",
+          "skill_time_active": -1,
+          "skill_cooldown_time": 0,
+          "ability_type": 5,
+          "ability_value": 400000,
+          "skill_name": "End Closer Savvy ○",
+          "skill_desc": "Moderately increase ability to get into a good position. (End Closer)"
+        },
+        "hint_level": 1
+      }
+    ],
+    "all_events": {
+      "dates": [],
+      "chain_events": [],
+      "random_events": [
+        {
+          "name": "The Euphoria of Destruction!",
+          "choices": [
+            {
+              "option": "再生で！",
+              "rewards": [
+                {
+                  "type": "Energy",
+                  "value": "+15"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            },
+            {
+              "option": "破壊で！",
+              "rewards": [
+                {
+                  "type": "Potential",
+                  "value": "+30"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "An Electrifying Present!",
+          "choices": [
+            {
+              "option": "力が湧いてきたかもしれない！",
+              "rewards": [
+                {
+                  "type": "Power",
+                  "value": "+10"
+                },
+                {
+                  "type": "Potential",
+                  "value": "+5"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            },
+            {
+              "option": "頭が回ってきたかもしれない！",
+              "rewards": [
+                {
+                  "type": "Skill Hint",
+                  "value": "+1",
+                  "detail": 201552
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "special_events": []
+    }
+  },
+  {
+    "id": 30145,
+    "chara_id_card": 1084,
+    "rarity": 3,
+    "effect_table_id": 30145,
+    "unique_effect_id": 30145,
+    "command_id": 102,
+    "skill_set_id": 9081084,
+    "support_card_type": 1,
+    "card_chara_name": "Tanino Gimlet",
+    "prefered_type_id": 2,
+    "prefered_type": "Power",
+    "effects": [
+      {
+        "0lb": 20,
+        "1lb": 21,
+        "2lb": 23,
+        "3lb": 25,
+        "mlb": 25,
+        "type": 1,
+        "type_name": "Friendship Bonus"
+      },
+      {
+        "0lb": -1,
+        "1lb": -1,
+        "2lb": -1,
+        "3lb": 15,
+        "mlb": 30,
+        "type": 2,
+        "type_name": "Mood Effect"
+      },
+      {
+        "0lb": -1,
+        "1lb": 1,
+        "2lb": 1,
+        "3lb": 1,
+        "mlb": 1,
+        "type": 4,
+        "type_name": "Stamina Bonus"
+      },
+      {
+        "0lb": 5,
+        "1lb": 6,
+        "2lb": 8,
+        "3lb": 10,
+        "mlb": 10,
+        "type": 14,
+        "type_name": "Initial Friendship Gauge"
+      },
+      {
+        "0lb": 1,
+        "1lb": 2,
+        "2lb": 3,
+        "3lb": 5,
+        "mlb": 5,
+        "type": 15,
+        "type_name": "Race Bonus"
+      },
+      {
+        "0lb": 5,
+        "1lb": 6,
+        "2lb": 8,
+        "3lb": 10,
+        "mlb": 10,
+        "type": 16,
+        "type_name": "Fan Bonus"
+      },
+      {
+        "0lb": 1,
+        "1lb": 1,
+        "2lb": 1,
+        "3lb": 1,
+        "mlb": 1,
+        "type": 17,
+        "type_name": "Hint Levels"
+      },
+      {
+        "0lb": 10,
+        "1lb": 13,
+        "2lb": 16,
+        "3lb": 20,
+        "mlb": 20,
+        "type": 18,
+        "type_name": "Hint Frequency"
+      }
+    ],
+    "hints_table": [
+      {
+        "type": "skill_hint",
+        "skill_id": 200152,
+        "skill_data": {
+          "id": 200152,
+          "rarity": 1,
+          "group_id": 20015,
+          "icon_id": 10031,
+          "grade_value": 129,
+          "condition_1": "ground_condition==1",
+          "skill_time_active": -1,
+          "skill_cooldown_time": 0,
+          "ability_type": 3,
+          "ability_value": 400000,
+          "skill_name": "Firm Conditions ○",
+          "skill_desc": "Moderately increase performance on firm ground."
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 200642,
+        "skill_data": {
+          "id": 200642,
+          "rarity": 1,
+          "group_id": 20064,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "running_style==4&is_lastspurt==1&corner==0",
+          "skill_time_active": 9000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Straightaway Spurt",
+          "skill_desc": "Slightly increase acceleration on a straight in the last spurt. (End Closer)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 200702,
+        "skill_data": {
+          "id": 200702,
+          "rarity": 1,
+          "group_id": 20070,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "distance_type==2&phase_random==2&order_rate>50",
+          "skill_time_active": 30000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Updrafters",
+          "skill_desc": "Slightly increase passing ability when positioned toward the back late-race. (Mile)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 201122,
+        "skill_data": {
+          "id": 201122,
+          "rarity": 1,
+          "group_id": 20112,
+          "icon_id": 20091,
+          "grade_value": 129,
+          "condition_1": "distance_type==3&phase_random==0",
+          "skill_time_active": 30000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 8,
+          "ability_value": 100000,
+          "skill_name": "Hawkeye",
+          "skill_desc": "Moderately widen field of view with heightened observation early-race. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 202082,
+        "skill_data": {
+          "id": 202082,
+          "rarity": 1,
+          "group_id": 20208,
+          "icon_id": 20041,
+          "grade_value": 217,
+          "condition_1": "distance_type==3&phase_firsthalf_random==2&order_rate>=40",
+          "skill_time_active": 18000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 31,
+          "ability_value": 2000,
+          "skill_name": "Take the Chance",
+          "skill_desc": "Slightly increase acceleration when positioned midpack or further back in the early part of late-race. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 202102,
+        "skill_data": {
+          "id": 202102,
+          "rarity": 1,
+          "group_id": 20210,
+          "icon_id": 20011,
+          "grade_value": 217,
+          "condition_1": "distance_type==3&phase_random==1&order_rate>=50",
+          "skill_time_active": 24000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 27,
+          "ability_value": 1500,
+          "skill_name": "Eager",
+          "skill_desc": "When positioned toward the back mid-race, slightly increase velocity. (Medium)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "stat_hint",
+        "stats": [
+          {
+            "stat_id": "Guts",
+            "value": 6
+          },
+          {
+            "stat_id": "Power",
+            "value": 2
+          }
+        ]
+      }
+    ],
+    "hints_event_table": [
+      {
+        "type": "skill_hint",
+        "skill_id": 200631,
+        "skill_data": {
+          "id": 200631,
+          "rarity": 2,
+          "group_id": 20063,
+          "icon_id": 20012,
+          "grade_value": 508,
+          "condition_1": "running_style==4&phase_firsthalf_random==3&is_lastspurt==1",
+          "skill_time_active": 30000,
+          "skill_cooldown_time": 5000000,
+          "ability_type": 27,
+          "ability_value": 3500,
+          "skill_name": "Sturm und Drang",
+          "skill_desc": "Increase velocity during the last spurt when positioned toward the back late-race. (End Closer)"
+        },
+        "hint_level": 1
+      },
+      {
+        "type": "skill_hint",
+        "skill_id": 201552,
+        "skill_data": {
+          "id": 201552,
+          "rarity": 1,
+          "group_id": 20155,
+          "icon_id": 10051,
+          "grade_value": 174,
+          "condition_1": "running_style==4",
+          "skill_time_active": -1,
+          "skill_cooldown_time": 0,
+          "ability_type": 5,
+          "ability_value": 400000,
+          "skill_name": "End Closer Savvy ○",
+          "skill_desc": "Moderately increase ability to get into a good position. (End Closer)"
+        },
+        "hint_level": 1
+      }
+    ],
+    "unique_effects": [
+      {
+        "level_unlocked": "2lb",
+        "effects": [
+          {
+            "type": 101,
+            "type_name": "Conditional Bonus (Friendship-Gauge / Trigger)",
+            "value": 80,
+            "value_1": 5,
+            "value_2": 2,
+            "value_3": 0,
+            "value_4": 0
+          }
+        ]
+      }
+    ],
+    "all_events": {
+      "dates": [],
+      "chain_events": [
+        {
+          "name": "As the Great Artists of Yore...",
+          "choices": [
+            {
+              "option": "",
+              "rewards": [
+                {
+                  "type": "Power",
+                  "value": "+15"
+                },
+                {
+                  "type": "Potential",
+                  "value": "+15"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                },
+                {
+                  "type": "di",
+                  "value": null
+                },
+                {
+                  "type": "Potential",
+                  "value": "+10"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "As the Criminal from the North...",
+          "choices": [
+            {
+              "option": "",
+              "rewards": [
+                {
+                  "type": "Stamina",
+                  "value": "+15"
+                },
+                {
+                  "type": "Power",
+                  "value": "+15"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                },
+                {
+                  "type": "di",
+                  "value": null
+                },
+                {
+                  "type": "Power",
+                  "value": "+10"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "As Bacchus, God of Wine...",
+          "choices": [
+            {
+              "option": "",
+              "rewards": [
+                {
+                  "type": "Stamina",
+                  "value": "+10"
+                },
+                {
+                  "type": "Power",
+                  "value": "+10"
+                },
+                {
+                  "type": "Skill Hint",
+                  "value": "+1",
+                  "detail": 200631
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "random_events": [
+        {
+          "name": "The Euphoria of Destruction!",
+          "choices": [
+            {
+              "option": "再生で！",
+              "rewards": [
+                {
+                  "type": "Energy",
+                  "value": "+15"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            },
+            {
+              "option": "破壊で！",
+              "rewards": [
+                {
+                  "type": "Potential",
+                  "value": "+30"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "An Electrifying Present!",
+          "choices": [
+            {
+              "option": "力が湧いてきたかもしれない！",
+              "rewards": [
+                {
+                  "type": "Power",
+                  "value": "+10"
+                },
+                {
+                  "type": "Potential",
+                  "value": "+5"
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            },
+            {
+              "option": "頭が回ってきたかもしれない！",
+              "rewards": [
+                {
+                  "type": "Skill Hint",
+                  "value": "+1",
+                  "detail": 201552
+                },
+                {
+                  "type": "Bond",
+                  "value": "+5",
+                  "detail": 1084
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "special_events": []
+    }
   }
 ]
