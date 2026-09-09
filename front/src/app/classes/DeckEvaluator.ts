@@ -1,6 +1,6 @@
 import { SupportCard } from "./SupportCard";
 import { TrainingData } from "../config/trainingData";
-import { StatsDict, HintResult } from "../types/cardTypes";
+import { StatsDict, HintResult, TrainingMode, TrainingFocusPreset } from "../types/cardTypes";
 import { isSupportCardAllowedInScenario } from "../config/supportCardScenarios";
 
 interface CardAppearance {
@@ -70,9 +70,26 @@ export class DeckEvaluator {
         this.deck.push(card);
     }
 
-    public getTrainingDistribution(scenarioName: string = "URA"): number[] {
+    public getTrainingDistribution(
+        scenarioName: string = "URA",
+        trainingMode: TrainingMode = "manual",
+        trainingFocus: TrainingFocusPreset = "Balanced",
+    ): number[] {
         if (this.manualDistribution) {
             return this.manualDistribution;
+        }
+
+        if (trainingMode === "independent") {
+            if (trainingFocus === "Stamina") {
+                // In-game Stamina preset heavily favors Stamina & Power facilities
+                return [0.18, 0.38, 0.24, 0.10, 0.10];
+            } else if (trainingFocus === "Sprint") {
+                // In-game Sprint preset heavily favors Speed & Power facilities
+                return [0.44, 0.06, 0.32, 0.06, 0.12];
+            } else {
+                // In-game Balanced preset distributes training turns evenly across facilities
+                return [0.20, 0.20, 0.20, 0.20, 0.20];
+            }
         }
 
         // Baseline weight applied equally to every training type, so that even
@@ -337,8 +354,10 @@ export class DeckEvaluator {
         averageMoodBonus: number = 20,
         optionalRaces: {G1: number, G2or3: number, PreOPorOP: number} = {G1: 0, G2or3: 0, PreOPorOP: 0},
         debug: boolean = false,
+        trainingMode: TrainingMode = "manual",
+        trainingFocus: TrainingFocusPreset = "Balanced",
     ): StatsDict {
-        const trainingDistribution = this.getTrainingDistribution(scenarioName);
+        const trainingDistribution = this.getTrainingDistribution(scenarioName, trainingMode, trainingFocus);
         const forcedRaces = TrainingData.getForcedRaces(scenarioName);
 
         const totalStatsGained: StatsDict = {
@@ -654,7 +673,18 @@ eventEffectiveness += (card.cardBonus["Event Effectiveness"] !== -1
             );
             return Math.max(Math.min(n, totalPlayableTurns), totalPlayableTurns - 30);
         };
-        const maxTrainingTurns = computeMaxTrainingTurns(meanRestRegen);
+        let maxTrainingTurns = computeMaxTrainingTurns(meanRestRegen);
+
+        if (trainingMode === "independent") {
+            const hasPalOrEnergyStabilizer = flatEnergyCostReduction > 0 || 
+                energyCostReduction > 0 || 
+                this.deck.some(c => c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Failure Protection"] !== -1 && (c.cardBonus["Failure Protection"] || 0) > 0));
+            if (!hasPalOrEnergyStabilizer) {
+                // In Independent Training (Auto/AFK), without Pal/Friend or energy stabilization,
+                // unmanaged bot energy leads to forced rests, failure risks and lost training turns
+                maxTrainingTurns = Math.max(0, maxTrainingTurns - 3);
+            }
+        }
 
         // Calculate training turns to bond for each card
         for (const card of this.deck) {
@@ -776,20 +806,28 @@ eventEffectiveness += (card.cardBonus["Event Effectiveness"] !== -1
                         usedProb: 0,
                     });
 
-                    // Sort best → worst by total stats
-                    allEntries.sort((a, b) => b.totalStats - a.totalStats);
-
-                    // Keep top actual-distribution probability mass (turns at facility / all turns incl. races).
-                    // Simulates a player only choosing to train here when good combos are present.
                     const targetProb = turnsToTrainAtThisFacility / totalGameTurns;
-                    let accumulated = 0;
                     const selectedEntries: { gains: number[]; probability: number }[] = [];
-                    for (const entry of allEntries) {
-                        if (accumulated >= targetProb) break;
-                        const usedProb = Math.min(entry.probability, targetProb - accumulated);
-                        selectedEntries.push({ gains: entry.gains, probability: usedProb });
-                        entry.usedProb = usedProb;
-                        accumulated += usedProb;
+
+                    if (trainingMode === "independent") {
+                        // In Independent Training (Auto/AFK), the in-game algorithm does NOT cherry-pick
+                        // top multi-rainbow turns. It trains at facilities across their natural probability distribution.
+                        for (const entry of allEntries) {
+                            selectedEntries.push({ gains: entry.gains, probability: entry.probability });
+                            entry.usedProb = entry.probability;
+                        }
+                    } else {
+                        // Manual Mode: human player selectively trains when high-stat card combinations are present
+                        allEntries.sort((a, b) => b.totalStats - a.totalStats);
+
+                        let accumulated = 0;
+                        for (const entry of allEntries) {
+                            if (accumulated >= targetProb) break;
+                            const usedProb = Math.min(entry.probability, targetProb - accumulated);
+                            selectedEntries.push({ gains: entry.gains, probability: usedProb });
+                            entry.usedProb = usedProb;
+                            accumulated += usedProb;
+                        }
                     }
 
                     // Renormalize selected probabilities to sum to 1

@@ -155,3 +155,7 @@ export interface RunningTypes {
     "Late Surger": boolean;
     "End Closer": boolean;
 }
+
+export type TrainingMode = "manual" | "independent";
+export type TrainingFocusPreset = "Balanced" | "Stamina" | "Sprint";
+

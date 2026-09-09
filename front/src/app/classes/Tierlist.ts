@@ -6,6 +6,8 @@ import {
     RunningTypes,
     StatsDict,
     HintResult,
+    TrainingMode,
+    TrainingFocusPreset,
 } from "../types/cardTypes";
 import { ACTIVE_PENALTY_CONFIG, PenaltyConfig } from "../config/penaltyConfig";
 import { TrainingData } from "../config/trainingData";
@@ -135,6 +137,68 @@ export class Tierlist {
         3: "SSR",
     };
 
+    /**
+     * Calculates stability, energy, initial stats, and race bonuses for cards in Independent Training (Auto/AFK) mode.
+     */
+    public calculateAutoCardBonuses(
+        card: SupportCard,
+        deckHasPal: boolean = false,
+    ): {
+        palBonus: number;
+        initialStatsBonus: number;
+        passiveEventsBonus: number;
+        raceBonusScore: number;
+        totalAutoBonus: number;
+    } {
+        // 1. Pal / Friend Card stability bonus
+        // In Independent Training (Auto/AFK), Pal cards stabilize energy, offer failure protection,
+        // provide high flat energy recovery and prevent injury death spirals.
+        let palBonus = 0;
+        const isPal = card.cardType.type === "Support" || card.cardType.type === "Buddy";
+        const hasFlatReduction = (card.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0;
+        const energyCostReduction = card.cardBonus["Energy Cost Reduction"] !== -1 ? (card.cardBonus["Energy Cost Reduction"] || 0) : 0;
+        const failureProtection = card.cardBonus["Failure Protection"] !== -1 ? (card.cardBonus["Failure Protection"] || 0) : 0;
+
+        if (isPal || hasFlatReduction) {
+            // First Pal card in the deck is a crucial lifeline (+120), secondary Pal still provides moderate stability (+40)
+            palBonus += deckHasPal ? 40 : 120;
+        }
+        if (energyCostReduction > 0) {
+            palBonus += energyCostReduction * 4;
+        }
+        if (failureProtection > 0) {
+            palBonus += failureProtection * 3;
+        }
+
+        // 2. Initial Stats stability bonus (Guaranteed turn 1 stats without RNG)
+        const initSpd = card.cardBonus["Initial Speed"] !== -1 ? (card.cardBonus["Initial Speed"] || 0) : 0;
+        const initSta = card.cardBonus["Initial Stamina"] !== -1 ? (card.cardBonus["Initial Stamina"] || 0) : 0;
+        const initPow = card.cardBonus["Initial Power"] !== -1 ? (card.cardBonus["Initial Power"] || 0) : 0;
+        const initGut = card.cardBonus["Initial Guts"] !== -1 ? (card.cardBonus["Initial Guts"] || 0) : 0;
+        const initWit = card.cardBonus["Initial Wit"] !== -1 ? (card.cardBonus["Initial Wit"] || 0) : 0;
+        const totalInit = initSpd + initSta + initPow + initGut + initWit;
+        const initialStatsBonus = totalInit * 1.5;
+
+        // 3. Passive Events and Event Recovery
+        const evRec = card.cardBonus["Event Recovery"] !== -1 ? (card.cardBonus["Event Recovery"] || 0) : 0;
+        const evEff = card.cardBonus["Event Effectiveness"] !== -1 ? (card.cardBonus["Event Effectiveness"] || 0) : 0;
+        const passiveEventsBonus = (evRec * 2.5) + (evEff * 1.5);
+
+        // 4. Race Bonus (Direct bonus for consistent race stat/SP yields in auto runs)
+        const rBonus = card.cardBonus["Race Bonus"] !== -1 ? (card.cardBonus["Race Bonus"] || 0) : 0;
+        const raceBonusScore = rBonus * 3.5;
+
+        const totalAutoBonus = palBonus + initialStatsBonus + passiveEventsBonus + raceBonusScore;
+
+        return {
+            palBonus,
+            initialStatsBonus,
+            passiveEventsBonus,
+            raceBonusScore,
+            totalAutoBonus,
+        };
+    }
+
     public bestCardForDeck(
         deckObject: DeckEvaluator = new DeckEvaluator(),
         raceTypes?: RaceTypes,
@@ -145,6 +209,8 @@ export class Tierlist {
         optionalRaces: {G1: number, G2or3: number, PreOPorOP: number} = {G1: 0, G2or3: 0, PreOPorOP: 0},
         averageMood: number = 15,
         sparkCapBonus: Record<string, number> = {},
+        trainingMode: TrainingMode = "manual",
+        trainingFocus: TrainingFocusPreset = "Balanced",
     ): TierlistResponse {
         // Default race types
         if (!raceTypes) {
@@ -174,46 +240,11 @@ export class Tierlist {
             };
         }
 
-        let weights: Record<string, number> = {};
-        const allWeights = WEIGHTS_CONFIG;
-
-        // Calculate average weights for all selected race types
-        const selectedRaceTypes: string[] = [];
-        for (const key of ["Long", "Medium", "Mile", "Sprint"] as const) {
-            if (raceTypes[key as keyof RaceTypes]) {
-                selectedRaceTypes.push(key);
-            }
-        }
-
-        if (selectedRaceTypes.length > 0) {
-            // Initialize weights to zero
-            weights = {
-                Speed: 0,
-                Stamina: 0,
-                Power: 0,
-                Guts: 0,
-                Wit: 0,
-                "Skill Points": 0,
-                Hints: 0,
-            };
-
-            // Sum up weights from all selected race types
-            for (const raceType of selectedRaceTypes) {
-                const raceWeights = allWeights[raceType as keyof typeof allWeights];
-                for (const [stat, weight] of Object.entries(raceWeights)) {
-                    weights[stat] = (weights[stat] || 0) + (weight as number);
-                }
-            }
-
-            // Calculate average by dividing by number of selected race types
-            for (const stat in weights) {
-                weights[stat] = weights[stat] / selectedRaceTypes.length;
-            }
-        }
+        const weights = this.calculateWeights(raceTypes, trainingMode, trainingFocus);
 
         // Create a deep copy of the deck
         const originalDeck = this.deepCopyDeck(deckObject);
-        const baseResultForDeck = deckObject.evaluateStats(scenarioName, averageMood, optionalRaces, true);
+        const baseResultForDeck = deckObject.evaluateStats(scenarioName, averageMood, optionalRaces, true, trainingMode, trainingFocus);
         // Career per-stat variance for the populated deck (cards driving the
         // combinatorial PMF). Empty-deck path contributes 0, so this also
         // acts as the variance of the displayed total = base + delta.
@@ -223,8 +254,7 @@ export class Tierlist {
         if (deckObject.manualDistribution) {
             emptyDeckEvaluator.setManualDistribution(deckObject.manualDistribution);
         }
-        // Base result for empty deck should be with 0 optional races to correctly calculate the delta
-        const baseResultEmptyDeck = emptyDeckEvaluator.evaluateStats(scenarioName, averageMood, {G1: 0, G2or3: 0, PreOPorOP: 0});
+        const baseResultEmptyDeck = emptyDeckEvaluator.evaluateStats(scenarioName, averageMood, {G1: 0, G2or3: 0, PreOPorOP: 0}, false, trainingMode, trainingFocus);
 
         const raceTypesArray = [
             raceTypes.Sprint,
@@ -348,7 +378,26 @@ export class Tierlist {
             ACTIVE_PENALTY_CONFIG,
             scenarioName,
             sparkCapBonus,
+            trainingMode,
         );
+
+        const deckHasPal = originalDeck.deck.some(
+            (c) => c && (c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0)
+        );
+
+        if (trainingMode === "independent") {
+            let totalDeckAutoBonus = 0;
+            let palCount = 0;
+            for (const c of originalDeck.deck) {
+                if (!c) continue;
+                const bonuses = this.calculateAutoCardBonuses(c, palCount > 0);
+                totalDeckAutoBonus += bonuses.totalAutoBonus;
+                if (c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0) {
+                    palCount++;
+                }
+            }
+            deck.score = (deck.score * 0.65) + totalDeckAutoBonus;
+        }
 
         // Generate score breakdown for the deck using the delta stats
         deck.scoreBreakdown = this.getScoreBreakdown(
@@ -360,6 +409,8 @@ export class Tierlist {
             ACTIVE_PENALTY_CONFIG,
             scenarioName,
             sparkCapBonus,
+            trainingMode,
+            originalDeck.deck,
         );
 
         const results: TierlistEntry[] = [];
@@ -392,7 +443,7 @@ export class Tierlist {
                         : new DeckEvaluator();
                     tempDeck.addCard(card);
 
-                    const result = tempDeck.evaluateStats(scenarioName, averageMood, optionalRaces);
+                    const result = tempDeck.evaluateStats(scenarioName, averageMood, optionalRaces, false, trainingMode, trainingFocus);
                     const cardHints = card.evaluateCardHints(
                         raceTypesArray,
                         runningTypesArray,
@@ -445,11 +496,22 @@ export class Tierlist {
                         ACTIVE_PENALTY_CONFIG,
                         scenarioName,
                         sparkCapBonus,
+                        trainingMode,
                     );
 
                     // The card's actual impact is the difference between new deck score and current deck score
                     const currentDeckScore = deck.score;
-                    const cardImpact = newDeckScore - currentDeckScore;
+                    let cardImpact = newDeckScore - currentDeckScore;
+
+                    if (trainingMode === "independent") {
+                        // Obniż wagę kart opierających się wyłącznie na wysokim Training Performance / Friendship Bonus
+                        // Algorytm gry nie poluje na podwójne/potrójne rainbow trainingi, więc sufit treningowy ma niższe przełożenie
+                        cardImpact *= 0.65;
+
+                        // Zwiększ priorytet kart Pal/Friend, Initial Stats, Eventów pasywnych i Race Bonus
+                        const autoBonuses = this.calculateAutoCardBonuses(card, deckHasPal);
+                        cardImpact += autoBonuses.totalAutoBonus;
+                    }
 
 
 
@@ -517,10 +579,285 @@ export class Tierlist {
         };
     }
 
+    /**
+     * Evaluates a specific list of cards at their exact specified limit break levels.
+     * Essential for evaluating a player's actual owned card inventory.
+     */
+    public evaluateSpecificCards(
+        deckEvaluator: DeckEvaluator,
+        raceTypes: RaceTypes,
+        runningTypes: RunningTypes,
+        cardsToEvaluate: Array<{ id: number; limitBreak: number }>,
+        allData: CardData[],
+        scenarioName: string = "GrandConcert",
+        optionalRaces: { G1: number; G2or3: number; PreOPorOP: number } = { G1: 0, G2or3: 0, PreOPorOP: 0 },
+        averageMood: number = 15,
+        sparkCapBonus: Record<string, number> = {},
+        trainingMode: TrainingMode = "manual",
+        trainingFocus: TrainingFocusPreset = "Balanced",
+    ): TierlistEntry[] {
+        const raceTypesArray = [
+            raceTypes.Sprint,
+            raceTypes.Mile,
+            raceTypes.Medium,
+            raceTypes.Long,
+        ];
+
+        const runningTypesArray = [
+            runningTypes["Front Runner"],
+            runningTypes["Pace Chaser"],
+            runningTypes["Late Surger"],
+            runningTypes["End Closer"],
+        ];
+
+        const deckObject = deckEvaluator ? this.deepCopyDeck(deckEvaluator) : new DeckEvaluator();
+        const baseResultForDeck = deckObject.evaluateStats(
+            scenarioName,
+            averageMood,
+            optionalRaces,
+            false,
+            trainingMode,
+            trainingFocus,
+        );
+        const baseResultEmptyDeck = new DeckEvaluator().evaluateStats(
+            scenarioName,
+            averageMood,
+            optionalRaces,
+            false,
+            trainingMode,
+            trainingFocus,
+        );
+
+        const weights = this.calculateWeights(raceTypes, trainingMode, trainingFocus);
+
+        const hintsForDeck = deckObject.evaluateHints(
+            raceTypesArray,
+            runningTypesArray,
+            optionalRaces,
+            {
+                Speed: baseResultForDeck.Speed || 0,
+                Stamina: baseResultForDeck.Stamina || 0,
+                Power: baseResultForDeck.Power || 0,
+                Guts: baseResultForDeck.Guts || 0,
+                Wit: baseResultForDeck.Wit || 0,
+            },
+            {
+                Speed: weights.Speed || 0,
+                Stamina: weights.Stamina || 0,
+                Power: weights.Power || 0,
+                Guts: weights.Guts || 0,
+                Wit: weights.Wit || 0,
+            }
+        );
+
+        let currentDeckScore = this.resultsWithPenaltyToScore(
+            baseResultForDeck,
+            this.calculateStatsDelta(baseResultForDeck, baseResultEmptyDeck),
+            hintsForDeck,
+            weights,
+            raceTypes,
+            ACTIVE_PENALTY_CONFIG,
+            scenarioName,
+            sparkCapBonus,
+            trainingMode,
+        );
+
+        const deckHasPal = deckObject.deck.some(
+            (c) => c && (c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0)
+        );
+
+        if (trainingMode === "independent") {
+            let totalDeckAutoBonus = 0;
+            let palCount = 0;
+            for (const c of deckObject.deck) {
+                if (!c) continue;
+                const bonuses = this.calculateAutoCardBonuses(c, palCount > 0);
+                totalDeckAutoBonus += bonuses.totalAutoBonus;
+                if (c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0) {
+                    palCount++;
+                }
+            }
+            currentDeckScore = (currentDeckScore * 0.65) + totalDeckAutoBonus;
+        }
+
+        const results: TierlistEntry[] = [];
+        const cardMap = new Map<number, CardData>();
+        for (const c of allData) {
+            if (c && c.id) cardMap.set(c.id, c);
+        }
+
+        for (const item of cardsToEvaluate) {
+            const cardDataEntry = cardMap.get(item.id);
+            if (!cardDataEntry) continue;
+
+            const cardId = item.id;
+            const limitBreak = Math.max(0, Math.min(4, item.limitBreak));
+            const charaId = cardDataEntry.chara_id_card || -1;
+            const cardName = cardDataEntry.card_chara_name || "Unknown";
+            const cardRarity = Tierlist.rarityToSymbol[cardDataEntry.rarity || -1] || "Unknown";
+            let cardType = cardDataEntry.prefered_type || "Unknown";
+            cardType = cardType === "Intelligence" ? "Wit" : cardType;
+
+            try {
+                const card = new SupportCard(cardId, limitBreak, allData);
+                const tempDeck = this.deepCopyDeck(deckObject);
+                tempDeck.addCard(card);
+
+                const result = tempDeck.evaluateStats(scenarioName, averageMood, optionalRaces, false, trainingMode, trainingFocus);
+                const cardHints = card.evaluateCardHints(
+                    raceTypesArray,
+                    runningTypesArray,
+                    optionalRaces,
+                    {
+                        Speed: result.Speed || 0,
+                        Stamina: result.Stamina || 0,
+                        Power: result.Power || 0,
+                        Guts: result.Guts || 0,
+                        Wit: result.Wit || 0,
+                    },
+                    {
+                        Speed: weights.Speed || 0,
+                        Stamina: weights.Stamina || 0,
+                        Power: weights.Power || 0,
+                        Guts: weights.Guts || 0,
+                        Wit: weights.Wit || 0,
+                    }
+                );
+
+                const deckHints = tempDeck.evaluateHints(
+                    raceTypesArray,
+                    runningTypesArray,
+                    optionalRaces,
+                    {
+                        Speed: result.Speed || 0,
+                        Stamina: result.Stamina || 0,
+                        Power: result.Power || 0,
+                        Guts: result.Guts || 0,
+                        Wit: result.Wit || 0,
+                    },
+                    {
+                        Speed: weights.Speed || 0,
+                        Stamina: weights.Stamina || 0,
+                        Power: weights.Power || 0,
+                        Guts: weights.Guts || 0,
+                        Wit: weights.Wit || 0,
+                    }
+                );
+
+                const deltaStat = this.calculateStatsDelta(result, baseResultEmptyDeck);
+                const deltaCardStat = this.calculateStatsDelta(result, baseResultForDeck);
+
+                const newDeckScore = this.resultsWithPenaltyToScore(
+                    result,
+                    deltaStat,
+                    deckHints,
+                    weights,
+                    raceTypes,
+                    ACTIVE_PENALTY_CONFIG,
+                    scenarioName,
+                    sparkCapBonus,
+                    trainingMode,
+                );
+
+                let cardImpact = newDeckScore - currentDeckScore;
+
+                if (trainingMode === "independent") {
+                    cardImpact *= 0.65;
+                    const autoBonuses = this.calculateAutoCardBonuses(card, deckHasPal);
+                    cardImpact += autoBonuses.totalAutoBonus;
+                }
+
+                const hintTypes = card.extractHintTypes();
+                const supportEffects = SUPPORT_EFFECT_NAMES.reduce(
+                    (acc, effectName) => {
+                        acc[effectName] = Math.max(
+                            card.cardBonus[effectName] || 0,
+                            0,
+                        );
+                        return acc;
+                    },
+                    {} as Record<SupportEffectName, number>,
+                );
+
+                results.push({
+                    id: cardId,
+                    chara_id: charaId,
+                    card_name: cardName,
+                    card_rarity: cardRarity,
+                    limit_break: limitBreak,
+                    card_type: cardType,
+                    support_effects: supportEffects,
+                    hints: cardHints,
+                    hintTypes: hintTypes,
+                    stats: deltaStat,
+                    stats_diff_only_added_to_deck: deltaCardStat,
+                    score: cardImpact,
+                });
+            } catch (err) {
+                console.warn(`Failed to evaluate specific card ${cardId} at ${limitBreak}lb:`, err);
+            }
+        }
+
+        return results.sort((a, b) => b.score - a.score);
+    }
+
+    private calculateWeights(
+        raceTypes: RaceTypes,
+        trainingMode: TrainingMode = "manual",
+        trainingFocus: TrainingFocusPreset = "Balanced",
+    ): Record<string, number> {
+        let weights: Record<string, number> = {};
+        const allWeights = WEIGHTS_CONFIG;
+
+        const selectedRaceTypes: string[] = [];
+        for (const key of ["Long", "Medium", "Mile", "Sprint"] as const) {
+            if (raceTypes[key as keyof RaceTypes]) {
+                selectedRaceTypes.push(key);
+            }
+        }
+
+        if (selectedRaceTypes.length > 0) {
+            weights = {
+                Speed: 0,
+                Stamina: 0,
+                Power: 0,
+                Guts: 0,
+                Wit: 0,
+                "Skill Points": 0,
+                Hints: 0,
+            };
+
+            for (const raceType of selectedRaceTypes) {
+                const raceWeights = allWeights[raceType as keyof typeof allWeights];
+                for (const [stat, weight] of Object.entries(raceWeights)) {
+                    weights[stat] = (weights[stat] || 0) + (weight as number);
+                }
+            }
+
+            for (const stat in weights) {
+                weights[stat] = weights[stat] / selectedRaceTypes.length;
+            }
+        }
+
+        if (trainingMode === "independent") {
+            if (trainingFocus === "Stamina") {
+                weights.Stamina = Math.max((weights.Stamina || 1.0) * 1.35, 1.3);
+                weights.Power = (weights.Power || 1.0) * 1.15;
+            } else if (trainingFocus === "Sprint") {
+                weights.Speed = Math.max((weights.Speed || 1.0) * 1.35, 1.4);
+                weights.Power = Math.max((weights.Power || 1.0) * 1.2, 1.2);
+                weights.Stamina = (weights.Stamina || 1.0) * 0.4;
+            }
+        }
+
+        return weights;
+    }
+
     private resultsToScore(
         resultDict: StatsDict,
         hintDict: HintResult,
         weights: Record<string, number>,
+        trainingMode: TrainingMode = "manual",
     ): number {
         // TODO: Add more sophisticated scoring // use hint_dict
         if (!weights || Object.keys(weights).length === 0) {
@@ -545,14 +882,15 @@ export class Tierlist {
         }
 
         // Add hints contribution using direct weight, multiplied by useful hints rate
+        // In Independent Training, boost hints and gold skills (+50%) for Priority Skills & parent farming
         const totalHints = hintDict.total_hints || 0;
         const usefulHintsRate = hintDict.useful_hints_rate || 0;
-        const hintsWeight = weightsCopy["Hints"] || 4.0;
+        const hintsWeight = (weightsCopy["Hints"] || 4.0) * (trainingMode === "independent" ? 1.5 : 1.0);
         score += totalHints * usefulHintsRate * hintsWeight;
 
         // Add gold skills contribution
         const goldSkills = hintDict.gold_skills || [];
-        const goldSkillWeight = weightsCopy["Gold Skills"] || 1.0;
+        const goldSkillWeight = (weightsCopy["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.5 : 1.0);
         for (const goldSkill of goldSkills) {
             score += goldSkill.value * goldSkill.multiplier * goldSkillWeight;
         }
@@ -569,6 +907,7 @@ export class Tierlist {
         penaltyConfig: PenaltyConfig = ACTIVE_PENALTY_CONFIG,
         scenarioName: string = "URA",
         sparkCapBonus: Record<string, number> = {},
+        trainingMode: TrainingMode = "manual",
     ): number {
         // Apply the soft-cap rules to stats before calculating score.
         // Gains above 1200 are halved; gains above the scenario max are clamped.
@@ -594,7 +933,7 @@ export class Tierlist {
         }
 
         // Get base score from clamped delta stats
-        const baseScore = this.resultsToScore(clampedDeltaStats, hintDict, weights);
+        const baseScore = this.resultsToScore(clampedDeltaStats, hintDict, weights, trainingMode);
 
         // Calculate stamina penalty based on raw stats (using original raw stats for penalties?)
         // User said "1310 speed would be rounded down to 1200 when calculated"
@@ -683,6 +1022,8 @@ export class Tierlist {
         penaltyConfig: PenaltyConfig = ACTIVE_PENALTY_CONFIG,
         scenarioName: string = "URA",
         sparkCapBonus: Record<string, number> = {},
+        trainingMode: TrainingMode = "manual",
+        deckCards: SupportCard[] = [],
     ): {
         totalScore: number;
         baseScore: number;
@@ -741,17 +1082,18 @@ export class Tierlist {
         }
 
         // Calculate base score using clamped delta stats
-        const baseScore = this.resultsToScore(clampedDeltaStats, hintDict, weights);
+        const baseScore = this.resultsToScore(clampedDeltaStats, hintDict, weights, trainingMode);
 
         // Calculate stat contributions from clamped delta stats
         const statContributions = [];
+        const trainingDeltaFactor = trainingMode === "independent" ? 0.65 : 1.0;
         for (const [k, v] of Object.entries(clampedDeltaStats)) {
             const weight = weights[k] || 0;
-            const contribution = v * weight;
+            const contribution = v * weight * trainingDeltaFactor;
             statContributions.push({
                 stat: k,
                 value: v,
-                weight: weight,
+                weight: weight * trainingDeltaFactor,
                 contribution: contribution,
             });
         }
@@ -760,7 +1102,7 @@ export class Tierlist {
         const totalHints = hintDict.total_hints || 0;
         const usefulHintsRate = hintDict.useful_hints_rate || 0;
         const usefulHintsCount = Math.round(totalHints * usefulHintsRate);
-        const hintsWeight = weights["Hints"] || 4.0;
+        const hintsWeight = (weights["Hints"] || 4.0) * (trainingMode === "independent" ? 1.5 : 1.0);
         const hintsContribution = usefulHintsCount * hintsWeight;
         statContributions.push({
             stat: "Useful Hints",
@@ -771,17 +1113,63 @@ export class Tierlist {
 
         // Add each gold skill as a separate line item
         const goldSkills = hintDict.gold_skills || [];
-        const goldSkillWeight = weights["Gold Skills"] || 1.0;
+        const goldSkillWeight = (weights["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.5 : 1.0);
         
         for (const goldSkill of goldSkills) {
             const skillContribution = goldSkill.value * goldSkill.multiplier * goldSkillWeight;
             statContributions.push({
                 stat: goldSkill.name,
                 value: goldSkill.value,
-                weight: goldSkill.multiplier,
+                weight: goldSkill.multiplier * (trainingMode === "independent" ? 1.5 : 1.0),
                 contribution: skillContribution,
                 icon_id: goldSkill.icon_id,
             });
+        }
+
+        let totalDeckAutoBonus = 0;
+        if (trainingMode === "independent" && deckCards.length > 0) {
+            let totalPalBonus = 0;
+            let totalInitBonus = 0;
+            let totalEventBonus = 0;
+            let totalRaceBonusScore = 0;
+            let palSeen = false;
+            for (const card of deckCards) {
+                if (!card) continue;
+                const b = this.calculateAutoCardBonuses(card, palSeen);
+                totalPalBonus += b.palBonus;
+                totalInitBonus += b.initialStatsBonus;
+                totalEventBonus += b.passiveEventsBonus;
+                totalRaceBonusScore += b.raceBonusScore;
+                totalDeckAutoBonus += b.totalAutoBonus;
+                if (card.cardType.type === "Support" || card.cardType.type === "Buddy" || (card.cardBonus["Flat Energy Cost Reduction (Friendship Training)"] || 0) > 0) {
+                    palSeen = true;
+                }
+            }
+
+            if (totalPalBonus > 0) {
+                statContributions.push({
+                    stat: "Pal / Energy Stability",
+                    value: Math.round(totalPalBonus),
+                    weight: 1.0,
+                    contribution: Math.round(totalPalBonus),
+                });
+            }
+            if (totalInitBonus > 0) {
+                statContributions.push({
+                    stat: "Initial Stats Guarantee",
+                    value: Math.round(totalInitBonus),
+                    weight: 1.0,
+                    contribution: Math.round(totalInitBonus),
+                });
+            }
+            if (totalRaceBonusScore + totalEventBonus > 0) {
+                statContributions.push({
+                    stat: "Race Bonus & Passive Events",
+                    value: Math.round(totalRaceBonusScore + totalEventBonus),
+                    weight: 1.0,
+                    contribution: Math.round(totalRaceBonusScore + totalEventBonus),
+                });
+            }
         }
 
         // Calculate stamina penalty details using raw stats
@@ -880,7 +1268,9 @@ export class Tierlist {
         const totalPenaltyPercent =
             staminaPenaltyPercent + speedPenaltyPercent + statOverbuiltPenaltyPercent + raceBonusPenaltyPercent;
         const finalMultiplier = 1.0 - totalPenaltyPercent;
-        const totalScore = baseScore * finalMultiplier;
+        const totalScore = trainingMode === "independent"
+            ? (baseScore * finalMultiplier * 0.65) + totalDeckAutoBonus
+            : baseScore * finalMultiplier;
 
         return {
             totalScore,

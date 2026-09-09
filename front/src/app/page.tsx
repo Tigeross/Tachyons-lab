@@ -6,7 +6,7 @@ import { Tierlist, LimitBreakFilter, TierlistResponse, TierlistEntry, TierlistEr
 import { DeckEvaluator } from "./classes/DeckEvaluator";
 import { SupportCard } from "./classes/SupportCard";
 import allDataRaw from "./data/data.json";
-import { CardData } from "./types/cardTypes";
+import { CardData, TrainingMode } from "./types/cardTypes";
 import TierlistDisplay from "./components/TierlistDisplay";
 import TierlistCard from "./components/TierlistCard";
 import StatPreviewer from "./components/StatPreviewer";
@@ -14,6 +14,8 @@ import { getAssetPath } from "./utils/paths";
 import TrainingDistributionSelector from "./components/TrainingDistributionSelector";
 import BlueSparksSelector from "./components/BlueSparksSelector";
 import CardCollectionManager from "./components/CardCollectionManager";
+import TrainingModeSelector from "./components/TrainingModeSelector";
+import IndependentTrainingGuide, { TrainingFocusPreset } from "./components/IndependentTrainingGuide";
 import { TrainingData, SparkSlot, MAX_SPARKS } from "./config/trainingData";
 
 // Types for our form state
@@ -31,6 +33,7 @@ interface DeckCard {
     cardName: string;
     cardRarity: string;
     cardType: string;
+    isRental?: boolean;
 }
 
 export default function Home() {
@@ -64,6 +67,22 @@ export default function Home() {
         () => Array.from({ length: MAX_SPARKS }, () => ({ stat: null, star: null })),
     );
 
+    // Gameplay Mode: Manual vs Independent Training (Auto/AFK)
+    const [trainingMode, setTrainingMode] = useState<TrainingMode>("manual");
+    const [trainingFocus, setTrainingFocus] = useState<TrainingFocusPreset>("Balanced");
+    const [autoFillNotice, setAutoFillNotice] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
+
+    // Sync default Training Focus preset when race distance selection changes
+    useEffect(() => {
+        if (selectedRaces.includes("Long") || selectedRaces.includes("Medium")) {
+            setTrainingFocus("Stamina");
+        } else if (selectedRaces.includes("Sprint") || selectedRaces.includes("Mile")) {
+            setTrainingFocus("Sprint");
+        } else {
+            setTrainingFocus("Balanced");
+        }
+    }, [selectedRaces]);
+
     // Hydrate sparks from localStorage
     useEffect(() => {
         const saved = localStorage.getItem("tachyons_blue_sparks");
@@ -78,12 +97,21 @@ export default function Home() {
                 // ignore malformed storage
             }
         }
+
+        const savedMode = localStorage.getItem("tachyons_training_mode");
+        if (savedMode === "manual" || savedMode === "independent") {
+            setTrainingMode(savedMode);
+        }
     }, []);
 
-    // Persist sparks
+    // Persist sparks and mode
     useEffect(() => {
         localStorage.setItem("tachyons_blue_sparks", JSON.stringify(sparks));
     }, [sparks]);
+
+    useEffect(() => {
+        localStorage.setItem("tachyons_training_mode", trainingMode);
+    }, [trainingMode]);
 
     // Debounce timer ref for auto-regeneration
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,7 +122,7 @@ export default function Home() {
     useEffect(() => {
         if (tierlistResult) setParamsStale(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedRaces, selectedStyles, isManualDistribution, manualDistribution, selectedScenario, tempAverageMood, optionalRaces, sparks]);
+    }, [selectedRaces, selectedStyles, isManualDistribution, manualDistribution, selectedScenario, tempAverageMood, optionalRaces, sparks, trainingMode, trainingFocus]);
 
     // Update optional races when scenario changes
     useEffect(() => {
@@ -119,8 +147,8 @@ export default function Home() {
             }
         });
 
-        setCalculatedDistribution(deckEvaluator.getTrainingDistribution(selectedScenario));
-    }, [currentDeck, selectedScenario]);
+        setCalculatedDistribution(deckEvaluator.getTrainingDistribution(selectedScenario, trainingMode, trainingFocus));
+    }, [currentDeck, selectedScenario, trainingMode, trainingFocus]);
 
     // Race types and running styles
     const raceTypes: { value: RaceType; label: string }[] = [
@@ -340,7 +368,7 @@ export default function Home() {
             // Blue spark cap bonuses raise the per-stat max used in soft-cap scoring
             const { capBonus: sparkCapBonus } = TrainingData.getSparkBonuses(sparks);
 
-            // Generate tierlist with current deck
+            // Generate tierlist with current deck, gameplay mode, and training focus preset
             const result = tierlist.bestCardForDeck(
                 deckEvaluator,
                 raceTypes,
@@ -351,6 +379,8 @@ export default function Home() {
                 optionalRaces,
                 averageMood,
                 sparkCapBonus,
+                trainingMode,
+                trainingFocus,
             );
             setTierlistResult(result);
             setParamsStale(false);
@@ -362,6 +392,244 @@ export default function Home() {
         }
         });
     };
+
+    // Auto-fill optimal AFK / Independent Training deck with realistic constraints:
+    // - 1x Borrowed / Rental card at MLB (the single best card overall, e.g. SSR Light Hello MLB)
+    // - 5x Owned cards strictly from user's registered collection at their actual Limit Break
+    // - If collection is empty or has < 5 cards, gracefully falls back to accessible staple SRs / welfare SSRs
+    const handleAutoFillDeck = useCallback(() => {
+        const allData = allDataRaw as CardData[];
+        const tierlist = new Tierlist();
+        const raceTypes = {
+            Sprint: selectedRaces.includes("Sprint"),
+            Mile: selectedRaces.includes("Mile"),
+            Medium: selectedRaces.includes("Medium"),
+            Long: selectedRaces.includes("Long"),
+        };
+        const runningTypes = {
+            "Front Runner": selectedStyles.includes("Front Runner"),
+            "Pace Chaser": selectedStyles.includes("Pace Chaser"),
+            "Late Surger": selectedStyles.includes("Late Surger"),
+            "End Closer": selectedStyles.includes("End Closer"),
+        };
+
+        const { capBonus: sparkCapBonus } = TrainingData.getSparkBonuses(sparks);
+
+        // 1. Retrieve user's owned cards from localStorage
+        let ownedCandidates: Array<{ id: number; limitBreak: number }> = [];
+        if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("tachyons_owned_cards");
+            if (saved) {
+                try {
+                    const parsed: Record<number, number> = JSON.parse(saved);
+                    ownedCandidates = Object.entries(parsed)
+                        .map(([idStr, lb]) => ({ id: Number(idStr), limitBreak: Number(lb) }))
+                        .filter((item) => item.limitBreak >= 0 && item.id > 0);
+                } catch (e) {
+                    console.error("Failed to parse owned cards", e);
+                }
+            }
+        }
+
+        // If the user has not registered any cards in the collection, warn them!
+        if (ownedCandidates.length === 0) {
+            setAutoFillNotice({
+                type: "warning",
+                message: "No owned cards found in your collection! Please scroll down to the Card Collection Manager and select the cards you own and their Limit Breaks (0LB to MLB), then click Auto-Fill again.",
+            });
+            return;
+        }
+
+        // Check if user already owns a high-LB Pal/Friend card (Support or Buddy, lb >= 2)
+        const userOwnsPal = ownedCandidates.some((c) => {
+            const cardData = allData.find((d) => d.id === c.id);
+            return cardData && (cardData.prefered_type === "Support" || cardData.prefered_type === "Buddy") && c.limitBreak >= 2;
+        });
+
+        // 2. Determine the single best Borrowed / Rental Card (1x MLB)
+        const mlbResult = tierlist.bestCardForDeck(
+            new DeckEvaluator(),
+            raceTypes,
+            runningTypes,
+            allData,
+            { R: [4], SR: [4], SSR: [4] },
+            selectedScenario,
+            optionalRaces,
+            averageMood,
+            sparkCapBonus,
+            "independent",
+            trainingFocus,
+        );
+
+        if (!("tierlist" in mlbResult)) return;
+
+        const newDeck: DeckCard[] = [];
+        const seenChara = new Set<number>();
+        const newCardKeys = new Set<string>();
+
+        const addCardToProposed = (entry?: TierlistEntry, isRental = false) => {
+            if (!entry || newDeck.length >= 6) return false;
+            if (seenChara.has(entry.chara_id)) return false;
+            seenChara.add(entry.chara_id);
+            newDeck.push({
+                id: entry.id,
+                charaId: entry.chara_id,
+                limitBreak: entry.limit_break,
+                cardName: entry.card_name,
+                cardRarity: entry.card_rarity,
+                cardType: entry.card_type,
+                isRental,
+            });
+            newCardKeys.add(`${entry.id}-${entry.limit_break}`);
+            return true;
+        };
+
+        // Pick 1 Rental MLB:
+        // If user already owns a high-LB Pal, rent the top Speed MLB card (e.g. Kitasan Black).
+        // Otherwise, borrow the top Pal/Friend card (e.g. Light Hello).
+        let rentalPicked = false;
+        if (!userOwnsPal) {
+            const pals = [...(mlbResult.tierlist["Support"] || []), ...(mlbResult.tierlist["Buddy"] || [])]
+                .sort((a, b) => b.score - a.score);
+            if (pals.length > 0) {
+                rentalPicked = addCardToProposed(pals[0], true);
+            }
+        }
+        if (!rentalPicked) {
+            const speeds = (mlbResult.tierlist["Speed"] || []).sort((a, b) => b.score - a.score);
+            if (speeds.length > 0) {
+                rentalPicked = addCardToProposed(speeds[0], true);
+            } else {
+                for (const tier of Object.values(mlbResult.tierlist)) {
+                    if (tier.length > 0) {
+                        rentalPicked = addCardToProposed(tier[0], true);
+                        if (rentalPicked) break;
+                    }
+                }
+            }
+        }
+
+        // 3. Evaluate ONLY the user's owned cards at their recorded limit breaks!
+        // STRICT RULE: No accessible staples or unowned cards are included!
+        const evaluatedOwned = tierlist.evaluateSpecificCards(
+            new DeckEvaluator(),
+            raceTypes,
+            runningTypes,
+            ownedCandidates,
+            allData,
+            selectedScenario,
+            optionalRaces,
+            averageMood,
+            sparkCapBonus,
+            "independent",
+            trainingFocus,
+        );
+
+        // Filter out cards that conflict with the already picked rental card character
+        const availableCandidates = evaluatedOwned.filter(
+            (c) => !seenChara.has(c.chara_id)
+        );
+
+        // Group evaluated candidates by card_type
+        const byType: Record<string, TierlistEntry[]> = {};
+        for (const c of availableCandidates) {
+            if (!byType[c.card_type]) byType[c.card_type] = [];
+            byType[c.card_type].push(c);
+        }
+
+        // Training Focus-based selection strictly from user's owned cards:
+        if (trainingFocus === "Stamina") {
+            // Stamina Focus: Prioritize 1-2 Stamina cards from owned collection + Speed & Power
+            const stams = byType["Stamina"] || [];
+            const stamTarget = selectedRaces.includes("Long") ? 2 : 1;
+            let stamCount = 0;
+            for (const st of stams) {
+                if (addCardToProposed(st, false)) {
+                    stamCount++;
+                    if (stamCount >= stamTarget) break;
+                }
+            }
+
+            let speedCount = 0;
+            for (const sp of byType["Speed"] || []) {
+                if (addCardToProposed(sp, false)) {
+                    speedCount++;
+                    if (speedCount >= 2) break;
+                }
+            }
+
+            for (const pw of byType["Power"] || []) {
+                if (addCardToProposed(pw, false)) break;
+            }
+        } else if (trainingFocus === "Sprint") {
+            // Sprint Focus: 0 Stamina cards! Prioritize 3 Speed + 2 Power
+            let speedCount = 0;
+            for (const sp of byType["Speed"] || []) {
+                if (addCardToProposed(sp, false)) {
+                    speedCount++;
+                    if (speedCount >= 3) break;
+                }
+            }
+
+            let pwrCount = 0;
+            for (const pw of byType["Power"] || []) {
+                if (addCardToProposed(pw, false)) {
+                    pwrCount++;
+                    if (pwrCount >= 2) break;
+                }
+            }
+        } else {
+            // Balanced Focus: 2 Speed + 1 Stamina (if owned) + 1 Power + 1 Wit
+            let speedCount = 0;
+            for (const sp of byType["Speed"] || []) {
+                if (addCardToProposed(sp, false)) {
+                    speedCount++;
+                    if (speedCount >= 2) break;
+                }
+            }
+
+            if (byType["Stamina"]?.length) {
+                for (const st of byType["Stamina"]) {
+                    if (addCardToProposed(st, false)) break;
+                }
+            }
+
+            if (byType["Power"]?.length) {
+                for (const pw of byType["Power"]) {
+                    if (addCardToProposed(pw, false)) break;
+                }
+            }
+
+            if (byType["Wit"]?.length) {
+                for (const wt of byType["Wit"]) {
+                    if (addCardToProposed(wt, false)) break;
+                }
+            }
+        }
+
+        // Wit / Power / Pal / remaining: fill slots with highest scoring owned cards
+        for (const candidate of availableCandidates) {
+            if (newDeck.length >= 6) break;
+            addCardToProposed(candidate, false);
+        }
+
+        const ownedCountInDeck = newDeck.filter((c) => !c.isRental).length;
+        if (newDeck.length < 6) {
+            setAutoFillNotice({
+                type: "warning",
+                message: `Added 1x Borrowed MLB (${newDeck[0]?.cardName}) + ${ownedCountInDeck} card(s) from your collection under "${trainingFocus}" Focus. To fill all 6 slots, please add more cards in the Card Collection Manager below.`,
+            });
+        } else {
+            setAutoFillNotice({
+                type: "success",
+                message: `Auto-filled 6-card deck for "${trainingFocus}" Focus: 1x Borrowed MLB (${newDeck[0]?.cardName}) + 5 cards strictly from your owned collection at your limit breaks!`,
+            });
+        }
+
+        setCurrentDeck(newDeck);
+        setDeckCardIds(newCardKeys);
+        setStatsVersion((v) => v + 1);
+    }, [selectedRaces, selectedStyles, selectedScenario, optionalRaces, averageMood, sparks, trainingFocus]);
 
     // Auto-regenerate tierlist when deck changes (with debounce)
     useEffect(() => {
@@ -485,6 +753,30 @@ export default function Home() {
                     Configure the race distance and running strategy for your deck. These settings directly affect the grading and ranking of each support card.
                 </p>
 
+                {/* Gameplay Mode Selection: Manual vs Independent Training */}
+                <div className="mb-6">
+                    <TrainingModeSelector
+                        mode={trainingMode}
+                        onChange={(newMode) => {
+                            setTrainingMode(newMode);
+                        }}
+                    />
+                </div>
+
+                {/* Independent Training Guide & Recommended Policy when active */}
+                {trainingMode === "independent" && (
+                    <div className="mb-6">
+                        <IndependentTrainingGuide
+                            selectedRaces={selectedRaces}
+                            selectedStyles={selectedStyles}
+                            onAutoFillDeck={handleAutoFillDeck}
+                            currentDeckCount={currentDeck.length}
+                            activePreset={trainingFocus}
+                            onPresetChange={setTrainingFocus}
+                        />
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
                     {/* Race Types */}
                     <div>
@@ -557,16 +849,50 @@ export default function Home() {
                     </div>
                 </div>
 
+                {/* Auto-Fill Feedback Notice */}
+                {autoFillNotice && (
+                    <div
+                        className={`my-4 p-4 rounded-xl border flex items-start justify-between gap-3 text-sm shadow-sm transition-all duration-200 ${
+                            autoFillNotice.type === "success"
+                                ? "bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
+                                : autoFillNotice.type === "warning"
+                                ? "bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200"
+                                : "bg-red-50 border-red-300 text-red-900 dark:bg-red-950/40 dark:border-red-800 dark:text-red-200"
+                        }`}
+                    >
+                        <div className="flex items-start gap-2.5">
+                            <span className="text-xl shrink-0">
+                                {autoFillNotice.type === "success" ? "✅" : "⚠️"}
+                            </span>
+                            <span className="font-medium leading-relaxed">{autoFillNotice.message}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setAutoFillNotice(null)}
+                            className="text-xs opacity-60 hover:opacity-100 font-bold px-2 py-1 rounded bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 transition-colors cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
                 {/* Current Deck Display */}
                 {currentDeck.length > 0 ? (
-                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg border border-blue-200 dark:border-blue-700 min-h-[180px]">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
-                                Current Deck ({currentDeck.length}/6)
-                            </h4>
+                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-700 min-h-[180px]">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <h4 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
+                                    Current Deck ({currentDeck.length}/6)
+                                </h4>
+                                {currentDeck.some((c) => c.isRental) && (
+                                    <span className="bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-xs">
+                                        ★ 1x Borrowed MLB + {currentDeck.filter((c) => !c.isRental).length}x Owned
+                                    </span>
+                                )}
+                            </div>
                             <button
                                 onClick={clearDeck}
-                                className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded transition-colors"
+                                className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded transition-colors self-start sm:self-auto cursor-pointer"
                             >
                                 Clear Deck
                             </button>
@@ -608,6 +934,15 @@ export default function Home() {
                                         key={cardKey}
                                         className="relative group"
                                     >
+                                        {card.isRental ? (
+                                            <div className="absolute -top-2.5 -right-1.5 z-30 bg-gradient-to-r from-amber-500 to-yellow-400 text-gray-950 font-extrabold text-[9px] px-2 py-0.5 rounded-full shadow-md border border-yellow-200 uppercase tracking-wide pointer-events-none">
+                                                ★ Rental MLB
+                                            </div>
+                                        ) : (
+                                            <div className="absolute -top-2.5 -right-1.5 z-30 bg-gray-800 text-gray-100 dark:bg-gray-700 font-bold text-[9px] px-1.5 py-0.5 rounded-full shadow-xs border border-gray-600 uppercase tracking-wide pointer-events-none">
+                                                {card.limitBreak === 4 ? "Owned MLB" : `Owned ${card.limitBreak}LB`}
+                                            </div>
+                                        )}
                                         <TierlistCard
                                             id={card.id}
                                             cardName={card.cardName}
