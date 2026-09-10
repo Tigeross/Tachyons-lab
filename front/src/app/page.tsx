@@ -394,9 +394,9 @@ export default function Home() {
     };
 
     // Auto-fill optimal AFK / Independent Training deck with realistic constraints:
-    // - 1x Borrowed / Rental card at MLB (the single best card overall, e.g. SSR Light Hello MLB)
+    // - 1x Borrowed / Rental card at MLB (the single best carry card, e.g. SSR Kitasan Black MLB or SSR Super Creek MLB)
     // - 5x Owned cards strictly from user's registered collection at their actual Limit Break
-    // - If collection is empty or has < 5 cards, gracefully falls back to accessible staple SRs / welfare SSRs
+    // - If collection has < 5 cards, intelligently complements with accessible staple SRs at MLB (Sweep Tosho, King Halo, etc.)
     const handleAutoFillDeck = useCallback(() => {
         const allData = allDataRaw as CardData[];
         const tierlist = new Tierlist();
@@ -431,20 +431,19 @@ export default function Home() {
             }
         }
 
-        // If the user has not registered any cards in the collection, warn them!
-        if (ownedCandidates.length === 0) {
-            setAutoFillNotice({
-                type: "warning",
-                message: "No owned cards found in your collection! Please scroll down to the Card Collection Manager and select the cards you own and their Limit Breaks (0LB to MLB), then click Auto-Fill again.",
-            });
-            return;
-        }
+        // Accessible staple SRs to complement deck if user owns fewer than 5 cards
+        const stapleSRs = allData
+            .filter((c) => c.rarity === 2)
+            .map((c) => ({ id: c.id, limitBreak: 4 }));
 
-        // Check if user already owns a high-LB Pal/Friend card (Support or Buddy, lb >= 2)
-        const userOwnsPal = ownedCandidates.some((c) => {
-            const cardData = allData.find((d) => d.id === c.id);
-            return cardData && (cardData.prefered_type === "Support" || cardData.prefered_type === "Buddy") && c.limitBreak >= 2;
-        });
+        // Combined candidate pool: owned cards first, then staple SRs
+        const candidatePool = [...ownedCandidates];
+        const ownedIdSet = new Set(ownedCandidates.map((c) => c.id));
+        for (const s of stapleSRs) {
+            if (!ownedIdSet.has(s.id)) {
+                candidatePool.push(s);
+            }
+        }
 
         // 2. Determine the single best Borrowed / Rental Card (1x MLB)
         const mlbResult = tierlist.bestCardForDeck(
@@ -485,37 +484,44 @@ export default function Home() {
         };
 
         // Pick 1 Rental MLB:
-        // If user already owns a high-LB Pal, rent the top Speed MLB card (e.g. Kitasan Black).
-        // Otherwise, borrow the top Pal/Friend card (e.g. Light Hello).
+        // Stamina focus (or Medium/Long): borrow Super Creek MLB if Long distance, otherwise top Speed MLB
+        // Sprint / Balanced focus: borrow top Speed MLB (e.g. Kitasan Black)
         let rentalPicked = false;
-        if (!userOwnsPal) {
-            const pals = [...(mlbResult.tierlist["Support"] || []), ...(mlbResult.tierlist["Buddy"] || [])]
-                .sort((a, b) => b.score - a.score);
-            if (pals.length > 0) {
-                rentalPicked = addCardToProposed(pals[0], true);
+        if (trainingFocus === "Stamina" && selectedRaces.includes("Long")) {
+            const creek = (mlbResult.tierlist["Stamina"] || []).find((c) => c.card_name.includes("Super Creek"));
+            if (creek) {
+                rentalPicked = addCardToProposed(creek, true);
+            } else {
+                const topStam = (mlbResult.tierlist["Stamina"] || []).sort((a, b) => b.score - a.score)[0];
+                if (topStam) rentalPicked = addCardToProposed(topStam, true);
             }
         }
+
         if (!rentalPicked) {
-            const speeds = (mlbResult.tierlist["Speed"] || []).sort((a, b) => b.score - a.score);
-            if (speeds.length > 0) {
-                rentalPicked = addCardToProposed(speeds[0], true);
+            const kitasan = (mlbResult.tierlist["Speed"] || []).find((c) => c.card_name.includes("Kitasan"));
+            if (kitasan) {
+                rentalPicked = addCardToProposed(kitasan, true);
             } else {
-                for (const tier of Object.values(mlbResult.tierlist)) {
-                    if (tier.length > 0) {
-                        rentalPicked = addCardToProposed(tier[0], true);
-                        if (rentalPicked) break;
+                const topSpeed = (mlbResult.tierlist["Speed"] || []).sort((a, b) => b.score - a.score)[0];
+                if (topSpeed) {
+                    rentalPicked = addCardToProposed(topSpeed, true);
+                } else {
+                    for (const tier of Object.values(mlbResult.tierlist)) {
+                        if (tier.length > 0) {
+                            rentalPicked = addCardToProposed(tier[0], true);
+                            if (rentalPicked) break;
+                        }
                     }
                 }
             }
         }
 
-        // 3. Evaluate ONLY the user's owned cards at their recorded limit breaks!
-        // STRICT RULE: No accessible staples or unowned cards are included!
-        const evaluatedOwned = tierlist.evaluateSpecificCards(
+        // 3. Evaluate candidate cards for the remaining 5 slots
+        const evaluatedCandidates = tierlist.evaluateSpecificCards(
             new DeckEvaluator(),
             raceTypes,
             runningTypes,
-            ownedCandidates,
+            candidatePool,
             allData,
             selectedScenario,
             optionalRaces,
@@ -525,104 +531,96 @@ export default function Home() {
             trainingFocus,
         );
 
-        // Filter out cards that conflict with the already picked rental card character
-        const availableCandidates = evaluatedOwned.filter(
-            (c) => !seenChara.has(c.chara_id)
-        );
+        // Separate user's truly owned cards vs staple fallback cards
+        const isOwnedCard = (c: TierlistEntry) => ownedIdSet.has(c.id);
 
-        // Group evaluated candidates by card_type
-        const byType: Record<string, TierlistEntry[]> = {};
-        for (const c of availableCandidates) {
-            if (!byType[c.card_type]) byType[c.card_type] = [];
-            byType[c.card_type].push(c);
+        const available = evaluatedCandidates.filter((c) => !seenChara.has(c.chara_id));
+        const ownedByType: Record<string, TierlistEntry[]> = {};
+        const stapleByType: Record<string, TierlistEntry[]> = {};
+
+        for (const c of available) {
+            const map = isOwnedCard(c) ? ownedByType : stapleByType;
+            if (!map[c.card_type]) map[c.card_type] = [];
+            map[c.card_type].push(c);
         }
 
-        // Training Focus-based selection strictly from user's owned cards:
-        if (trainingFocus === "Stamina") {
-            // Stamina Focus: Prioritize 1-2 Stamina cards from owned collection + Speed & Power
-            const stams = byType["Stamina"] || [];
-            const stamTarget = selectedRaces.includes("Long") ? 2 : 1;
-            let stamCount = 0;
-            for (const st of stams) {
-                if (addCardToProposed(st, false)) {
-                    stamCount++;
-                    if (stamCount >= stamTarget) break;
+        // Helper to pick next best card of a given type (preferring owned, then staple fallback)
+        const pickCardOfType = (types: string[]): boolean => {
+            if (newDeck.length >= 6) return false;
+            for (const t of types) {
+                const ownedList = ownedByType[t] || [];
+                for (const card of ownedList) {
+                    if (addCardToProposed(card, false)) return true;
                 }
             }
+            for (const t of types) {
+                const stapleList = stapleByType[t] || [];
+                for (const card of stapleList) {
+                    if (addCardToProposed(card, false)) return true;
+                }
+            }
+            return false;
+        };
 
-            let speedCount = 0;
-            for (const sp of byType["Speed"] || []) {
-                if (addCardToProposed(sp, false)) {
-                    speedCount++;
-                    if (speedCount >= 2) break;
-                }
+        // 4. Fill deck following competitive Uma Musume synergy templates
+        if (trainingFocus === "Sprint") {
+            // Sprint / Mile Focus: 4 Speed + 2 Power (or 3 Speed + 2 Power + 1 Flex)
+            // Zero Stamina cards needed
+            while (newDeck.filter((c) => c.cardType === "Speed").length < 4 && newDeck.length < 6) {
+                if (!pickCardOfType(["Speed"])) break;
             }
-
-            for (const pw of byType["Power"] || []) {
-                if (addCardToProposed(pw, false)) break;
+            while (newDeck.filter((c) => c.cardType === "Power").length < 2 && newDeck.length < 6) {
+                if (!pickCardOfType(["Power"])) break;
             }
-        } else if (trainingFocus === "Sprint") {
-            // Sprint Focus: 0 Stamina cards! Prioritize 3 Speed + 2 Power
-            let speedCount = 0;
-            for (const sp of byType["Speed"] || []) {
-                if (addCardToProposed(sp, false)) {
-                    speedCount++;
-                    if (speedCount >= 3) break;
-                }
+            while (newDeck.length < 6) {
+                if (!pickCardOfType(["Wit", "Support", "Speed", "Power"])) break;
             }
-
-            let pwrCount = 0;
-            for (const pw of byType["Power"] || []) {
-                if (addCardToProposed(pw, false)) {
-                    pwrCount++;
-                    if (pwrCount >= 2) break;
-                }
+        } else if (trainingFocus === "Stamina") {
+            // Stamina / Long Focus: 3 Speed + 2 Stamina + 1 Flex (Power / Pal / Stamina)
+            const stamTarget = selectedRaces.includes("Long") ? 3 : 2;
+            while (newDeck.filter((c) => c.cardType === "Stamina").length < stamTarget && newDeck.length < 6) {
+                if (!pickCardOfType(["Stamina"])) break;
+            }
+            while (newDeck.filter((c) => c.cardType === "Speed").length < 3 && newDeck.length < 6) {
+                if (!pickCardOfType(["Speed"])) break;
+            }
+            while (newDeck.length < 6) {
+                if (!pickCardOfType(["Power", "Support", "Stamina", "Speed"])) break;
             }
         } else {
-            // Balanced Focus: 2 Speed + 1 Stamina (if owned) + 1 Power + 1 Wit
-            let speedCount = 0;
-            for (const sp of byType["Speed"] || []) {
-                if (addCardToProposed(sp, false)) {
-                    speedCount++;
-                    if (speedCount >= 2) break;
-                }
+            // Balanced / Medium Focus: 3 Speed + 1-2 Stamina/Power + 1 Flex (Pal / Wit / Power)
+            while (newDeck.filter((c) => c.cardType === "Speed").length < 3 && newDeck.length < 6) {
+                if (!pickCardOfType(["Speed"])) break;
             }
-
-            if (byType["Stamina"]?.length) {
-                for (const st of byType["Stamina"]) {
-                    if (addCardToProposed(st, false)) break;
-                }
+            if (newDeck.filter((c) => c.cardType === "Stamina").length < 1 && newDeck.length < 6) {
+                pickCardOfType(["Stamina"]);
             }
-
-            if (byType["Power"]?.length) {
-                for (const pw of byType["Power"]) {
-                    if (addCardToProposed(pw, false)) break;
-                }
+            if (newDeck.filter((c) => c.cardType === "Power").length < 1 && newDeck.length < 6) {
+                pickCardOfType(["Power"]);
             }
-
-            if (byType["Wit"]?.length) {
-                for (const wt of byType["Wit"]) {
-                    if (addCardToProposed(wt, false)) break;
-                }
+            while (newDeck.length < 6) {
+                if (!pickCardOfType(["Support", "Wit", "Speed", "Power", "Stamina"])) break;
             }
         }
 
-        // Wit / Power / Pal / remaining: fill slots with highest scoring owned cards
-        for (const candidate of availableCandidates) {
+        // Final safety fill: any remaining available card
+        for (const candidate of available) {
             if (newDeck.length >= 6) break;
             addCardToProposed(candidate, false);
         }
 
-        const ownedCountInDeck = newDeck.filter((c) => !c.isRental).length;
-        if (newDeck.length < 6) {
+        const ownedCount = newDeck.filter((c) => !c.isRental && ownedIdSet.has(c.id)).length;
+        const stapleCount = newDeck.filter((c) => !c.isRental && !ownedIdSet.has(c.id)).length;
+
+        if (stapleCount > 0) {
             setAutoFillNotice({
-                type: "warning",
-                message: `Added 1x Borrowed MLB (${newDeck[0]?.cardName}) + ${ownedCountInDeck} card(s) from your collection under "${trainingFocus}" Focus. To fill all 6 slots, please add more cards in the Card Collection Manager below.`,
+                type: "success",
+                message: `Auto-filled 6-card deck for "${trainingFocus}" Focus: 1x Borrowed MLB (${newDeck[0]?.cardName}) + ${ownedCount} from your collection + ${stapleCount} staple SR(s) at MLB. You can register more cards in the Card Collection Manager below.`,
             });
         } else {
             setAutoFillNotice({
                 type: "success",
-                message: `Auto-filled 6-card deck for "${trainingFocus}" Focus: 1x Borrowed MLB (${newDeck[0]?.cardName}) + 5 cards strictly from your owned collection at your limit breaks!`,
+                message: `Auto-filled 6-card deck for "${trainingFocus}" Focus: 1x Borrowed MLB (${newDeck[0]?.cardName}) + 5 cards strictly from your collection at your limit breaks!`,
             });
         }
 

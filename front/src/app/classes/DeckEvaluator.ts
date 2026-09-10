@@ -79,19 +79,6 @@ export class DeckEvaluator {
             return this.manualDistribution;
         }
 
-        if (trainingMode === "independent") {
-            if (trainingFocus === "Stamina") {
-                // In-game Stamina preset heavily favors Stamina & Power facilities
-                return [0.18, 0.38, 0.24, 0.10, 0.10];
-            } else if (trainingFocus === "Sprint") {
-                // In-game Sprint preset heavily favors Speed & Power facilities
-                return [0.44, 0.06, 0.32, 0.06, 0.12];
-            } else {
-                // In-game Balanced preset distributes training turns evenly across facilities
-                return [0.20, 0.20, 0.20, 0.20, 0.20];
-            }
-        }
-
         // Baseline weight applied equally to every training type, so that even
         // with high Specialty Priority a deck doesn't tunnel onto one type.
         // Configurable per-scenario via TrainingData.getBaselineTrainingWeight.
@@ -104,6 +91,19 @@ export class DeckEvaluator {
             baselineWeight,
             baselineWeight,
         ];
+
+        // In Independent Training (Auto/AFK), apply Focus preset bias to baseline distribution
+        // while continuing to naturally factor in every card's Specialty Priority
+        if (trainingMode === "independent") {
+            if (trainingFocus === "Stamina") {
+                trainingDistribution[1] += 0.25; // Stamina facility bias
+                trainingDistribution[2] += 0.12; // Power facility bias
+            } else if (trainingFocus === "Sprint") {
+                trainingDistribution[0] += 0.30; // Speed facility bias
+                trainingDistribution[2] += 0.15; // Power facility bias
+            }
+            // Balanced maintains uniform baseline weights across facilities
+        }
 
         for (const card of this.deck) {
             const idx = DeckEvaluator.typeToIndex[card.cardType.type];
@@ -681,8 +681,8 @@ eventEffectiveness += (card.cardBonus["Event Effectiveness"] !== -1
                 this.deck.some(c => c.cardType.type === "Support" || c.cardType.type === "Buddy" || (c.cardBonus["Failure Protection"] !== -1 && (c.cardBonus["Failure Protection"] || 0) > 0));
             if (!hasPalOrEnergyStabilizer) {
                 // In Independent Training (Auto/AFK), without Pal/Friend or energy stabilization,
-                // unmanaged bot energy leads to forced rests, failure risks and lost training turns
-                maxTrainingTurns = Math.max(0, maxTrainingTurns - 3);
+                // unmanaged bot energy leads to slightly more forced rests
+                maxTrainingTurns = Math.max(0, maxTrainingTurns - 1);
             }
         }
 
@@ -809,25 +809,16 @@ eventEffectiveness += (card.cardBonus["Event Effectiveness"] !== -1
                     const targetProb = turnsToTrainAtThisFacility / totalGameTurns;
                     const selectedEntries: { gains: number[]; probability: number }[] = [];
 
-                    if (trainingMode === "independent") {
-                        // In Independent Training (Auto/AFK), the in-game algorithm does NOT cherry-pick
-                        // top multi-rainbow turns. It trains at facilities across their natural probability distribution.
-                        for (const entry of allEntries) {
-                            selectedEntries.push({ gains: entry.gains, probability: entry.probability });
-                            entry.usedProb = entry.probability;
-                        }
-                    } else {
-                        // Manual Mode: human player selectively trains when high-stat card combinations are present
-                        allEntries.sort((a, b) => b.totalStats - a.totalStats);
+                    // Simulates player/bot choosing to train here when card combos are present
+                    allEntries.sort((a, b) => b.totalStats - a.totalStats);
 
-                        let accumulated = 0;
-                        for (const entry of allEntries) {
-                            if (accumulated >= targetProb) break;
-                            const usedProb = Math.min(entry.probability, targetProb - accumulated);
-                            selectedEntries.push({ gains: entry.gains, probability: usedProb });
-                            entry.usedProb = usedProb;
-                            accumulated += usedProb;
-                        }
+                    let accumulated = 0;
+                    for (const entry of allEntries) {
+                        if (accumulated >= targetProb) break;
+                        const usedProb = Math.min(entry.probability, targetProb - accumulated);
+                        selectedEntries.push({ gains: entry.gains, probability: usedProb });
+                        entry.usedProb = usedProb;
+                        accumulated += usedProb;
                     }
 
                     // Renormalize selected probabilities to sum to 1

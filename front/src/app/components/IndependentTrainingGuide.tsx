@@ -136,7 +136,7 @@ export default function IndependentTrainingGuide({
                 <div className="flex items-center gap-2">
                     <span className="text-base">📌</span>
                     <span>
-                        <strong>Deck Rule:</strong> Exactly <strong>1x Borrowed MLB Card</strong> (Rental slot). The other <strong>5 slots</strong> are populated strictly from what you registered in the <strong>Card Collection Manager</strong> below at your exact Limit Breaks.
+                        <strong>Deck Rule:</strong> Exactly <strong>1x Borrowed MLB Card</strong> (Rental carry slot, e.g. Kitasan Black MLB / Super Creek MLB). The other <strong>5 slots</strong> are populated from your <strong>Card Collection Manager</strong> at your limit breaks (or accessible staple SRs if not yet registered).
                     </span>
                 </div>
             </div>
@@ -227,14 +227,14 @@ export default function IndependentTrainingGuide({
 
             {/* Core Pillars Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-4">
-                {/* Pillar 1: Pals / Friends */}
+                {/* Pillar 1: Core Speed + Pal Synergy */}
                 <div className="bg-white/80 dark:bg-gray-800/80 p-4 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
                     <div className="flex items-center gap-2 font-bold text-sm text-emerald-900 dark:text-emerald-200 mb-1.5">
-                        <span>🤝</span>
-                        <span>Pal / Friend Cards</span>
+                        <span>⚡</span>
+                        <span>Core Speed &amp; Pal Synergy</span>
                     </div>
                     <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-                        <strong className="text-emerald-700 dark:text-emerald-300">SSS Priority:</strong> SSR Light Hello, Riko Kashimoto, etc. They stabilize energy, grant guaranteed outings, reduce training stamina consumption, and shield the bot from failures and injuries.
+                        <strong className="text-emerald-700 dark:text-emerald-300">Foundation (3-4 Speed):</strong> Speed cards ensure consistent race wins in Senior Year. Pair with a Pal card (Light Hello, Tazuna) or energy stabilizers to safeguard stamina and shield against training injuries.
                     </p>
                 </div>
 

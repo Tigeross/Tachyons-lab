@@ -160,14 +160,14 @@ export class Tierlist {
         const failureProtection = card.cardBonus["Failure Protection"] !== -1 ? (card.cardBonus["Failure Protection"] || 0) : 0;
 
         if (isPal || hasFlatReduction) {
-            // First Pal card in the deck is a crucial lifeline (+120), secondary Pal still provides moderate stability (+40)
-            palBonus += deckHasPal ? 40 : 120;
+            // First Pal card in the deck provides stability (+35), secondary Pal (+10)
+            palBonus += deckHasPal ? 10 : 35;
         }
         if (energyCostReduction > 0) {
-            palBonus += energyCostReduction * 4;
+            palBonus += energyCostReduction * 1.0;
         }
         if (failureProtection > 0) {
-            palBonus += failureProtection * 3;
+            palBonus += failureProtection * 0.6;
         }
 
         // 2. Initial Stats stability bonus (Guaranteed turn 1 stats without RNG)
@@ -177,16 +177,16 @@ export class Tierlist {
         const initGut = card.cardBonus["Initial Guts"] !== -1 ? (card.cardBonus["Initial Guts"] || 0) : 0;
         const initWit = card.cardBonus["Initial Wit"] !== -1 ? (card.cardBonus["Initial Wit"] || 0) : 0;
         const totalInit = initSpd + initSta + initPow + initGut + initWit;
-        const initialStatsBonus = totalInit * 1.5;
+        const initialStatsBonus = totalInit * 0.4;
 
         // 3. Passive Events and Event Recovery
         const evRec = card.cardBonus["Event Recovery"] !== -1 ? (card.cardBonus["Event Recovery"] || 0) : 0;
         const evEff = card.cardBonus["Event Effectiveness"] !== -1 ? (card.cardBonus["Event Effectiveness"] || 0) : 0;
-        const passiveEventsBonus = (evRec * 2.5) + (evEff * 1.5);
+        const passiveEventsBonus = (evRec * 0.8) + (evEff * 0.4);
 
         // 4. Race Bonus (Direct bonus for consistent race stat/SP yields in auto runs)
         const rBonus = card.cardBonus["Race Bonus"] !== -1 ? (card.cardBonus["Race Bonus"] || 0) : 0;
-        const raceBonusScore = rBonus * 3.5;
+        const raceBonusScore = rBonus * 1.2;
 
         const totalAutoBonus = palBonus + initialStatsBonus + passiveEventsBonus + raceBonusScore;
 
@@ -396,7 +396,7 @@ export class Tierlist {
                     palCount++;
                 }
             }
-            deck.score = (deck.score * 0.65) + totalDeckAutoBonus;
+            deck.score = deck.score + totalDeckAutoBonus;
         }
 
         // Generate score breakdown for the deck using the delta stats
@@ -504,11 +504,6 @@ export class Tierlist {
                     let cardImpact = newDeckScore - currentDeckScore;
 
                     if (trainingMode === "independent") {
-                        // Obniż wagę kart opierających się wyłącznie na wysokim Training Performance / Friendship Bonus
-                        // Algorytm gry nie poluje na podwójne/potrójne rainbow trainingi, więc sufit treningowy ma niższe przełożenie
-                        cardImpact *= 0.65;
-
-                        // Zwiększ priorytet kart Pal/Friend, Initial Stats, Eventów pasywnych i Race Bonus
                         const autoBonuses = this.calculateAutoCardBonuses(card, deckHasPal);
                         cardImpact += autoBonuses.totalAutoBonus;
                     }
@@ -677,7 +672,7 @@ export class Tierlist {
                     palCount++;
                 }
             }
-            currentDeckScore = (currentDeckScore * 0.65) + totalDeckAutoBonus;
+            currentDeckScore = currentDeckScore + totalDeckAutoBonus;
         }
 
         const results: TierlistEntry[] = [];
@@ -762,7 +757,6 @@ export class Tierlist {
                 let cardImpact = newDeckScore - currentDeckScore;
 
                 if (trainingMode === "independent") {
-                    cardImpact *= 0.65;
                     const autoBonuses = this.calculateAutoCardBonuses(card, deckHasPal);
                     cardImpact += autoBonuses.totalAutoBonus;
                 }
@@ -882,15 +876,15 @@ export class Tierlist {
         }
 
         // Add hints contribution using direct weight, multiplied by useful hints rate
-        // In Independent Training, boost hints and gold skills (+50%) for Priority Skills & parent farming
+        // In Independent Training, boost hints and gold skills (+25%) for Priority Skills & parent farming
         const totalHints = hintDict.total_hints || 0;
         const usefulHintsRate = hintDict.useful_hints_rate || 0;
-        const hintsWeight = (weightsCopy["Hints"] || 4.0) * (trainingMode === "independent" ? 1.5 : 1.0);
+        const hintsWeight = (weightsCopy["Hints"] || 4.0) * (trainingMode === "independent" ? 1.25 : 1.0);
         score += totalHints * usefulHintsRate * hintsWeight;
 
         // Add gold skills contribution
         const goldSkills = hintDict.gold_skills || [];
-        const goldSkillWeight = (weightsCopy["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.5 : 1.0);
+        const goldSkillWeight = (weightsCopy["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.25 : 1.0);
         for (const goldSkill of goldSkills) {
             score += goldSkill.value * goldSkill.multiplier * goldSkillWeight;
         }
@@ -1008,7 +1002,10 @@ export class Tierlist {
             staminaPenaltyPercent + speedPenaltyPercent + raceBonusPenaltyPercent;
         const finalMultiplier = 1.0 - totalPenaltyPercent;
 
-        const finalScore = baseScore * finalMultiplier;
+        let finalScore = baseScore * finalMultiplier;
+        if (trainingMode === "independent") {
+            finalScore *= 0.90;
+        }
 
         return finalScore;
     }
@@ -1086,7 +1083,7 @@ export class Tierlist {
 
         // Calculate stat contributions from clamped delta stats
         const statContributions = [];
-        const trainingDeltaFactor = trainingMode === "independent" ? 0.65 : 1.0;
+        const trainingDeltaFactor = trainingMode === "independent" ? 0.90 : 1.0;
         for (const [k, v] of Object.entries(clampedDeltaStats)) {
             const weight = weights[k] || 0;
             const contribution = v * weight * trainingDeltaFactor;
@@ -1102,7 +1099,7 @@ export class Tierlist {
         const totalHints = hintDict.total_hints || 0;
         const usefulHintsRate = hintDict.useful_hints_rate || 0;
         const usefulHintsCount = Math.round(totalHints * usefulHintsRate);
-        const hintsWeight = (weights["Hints"] || 4.0) * (trainingMode === "independent" ? 1.5 : 1.0);
+        const hintsWeight = (weights["Hints"] || 4.0) * (trainingMode === "independent" ? 1.25 : 1.0);
         const hintsContribution = usefulHintsCount * hintsWeight;
         statContributions.push({
             stat: "Useful Hints",
@@ -1113,14 +1110,14 @@ export class Tierlist {
 
         // Add each gold skill as a separate line item
         const goldSkills = hintDict.gold_skills || [];
-        const goldSkillWeight = (weights["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.5 : 1.0);
+        const goldSkillWeight = (weights["Gold Skills"] || 1.0) * (trainingMode === "independent" ? 1.25 : 1.0);
         
         for (const goldSkill of goldSkills) {
             const skillContribution = goldSkill.value * goldSkill.multiplier * goldSkillWeight;
             statContributions.push({
                 stat: goldSkill.name,
                 value: goldSkill.value,
-                weight: goldSkill.multiplier * (trainingMode === "independent" ? 1.5 : 1.0),
+                weight: goldSkill.multiplier * (trainingMode === "independent" ? 1.25 : 1.0),
                 contribution: skillContribution,
                 icon_id: goldSkill.icon_id,
             });
@@ -1269,7 +1266,7 @@ export class Tierlist {
             staminaPenaltyPercent + speedPenaltyPercent + statOverbuiltPenaltyPercent + raceBonusPenaltyPercent;
         const finalMultiplier = 1.0 - totalPenaltyPercent;
         const totalScore = trainingMode === "independent"
-            ? (baseScore * finalMultiplier * 0.65) + totalDeckAutoBonus
+            ? (baseScore * finalMultiplier * 0.90) + totalDeckAutoBonus
             : baseScore * finalMultiplier;
 
         return {
